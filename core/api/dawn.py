@@ -113,12 +113,22 @@ class APIClient:
                     if response.status_code in (500, 502, 503, 504):
                         raise ServerError(f"Server error - {response.status_code}")
 
+                    content_type = response.headers.get("content-type", "")
+                    if "application/json" not in content_type:
+                        print(
+                            f"Unexpected content type '{content_type}': {response.text[:200]}"
+                        )
+                        raise ServerError("Unexpected response format, most likely server error")
+
                     try:
                         response_json = response.json()
                         await self._verify_response(response_json)
                         return response_json
                     except json.JSONDecodeError:
-                        raise ServerError(f"Failed to decode response, most likely server error")
+                        print(f"Failed to decode response: {response.text}")
+                        raise ServerError(
+                            "Failed to decode response, most likely server error"
+                        )
 
                 if return_full_response:
                     return response
@@ -275,7 +285,7 @@ class DawnExtensionAPI(APIClient):
         headers = {
             'user-agent': self.user_agent,
             'content-type': 'application/json',
-            'authorization': f'Berear {self.auth_token}',
+            'Authorization': f'Bearer {self.auth_token.strip()}',
             'accept': '*/*',
             'origin': 'chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp',
             'accept-language': 'uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -301,7 +311,7 @@ class DawnExtensionAPI(APIClient):
     @require_auth_token
     async def user_info(self, app_id: str) -> dict:
         headers = {
-            'authorization': f'Berear {self.auth_token}',
+            'Authorization': f'Bearer {self.auth_token.strip()}',
             'user-agent': self.user_agent,
             'content-type': 'application/json',
             'accept': '*/*',
@@ -395,7 +405,7 @@ class DawnExtensionAPI(APIClient):
             tasks = ["telegramid", "discordid", "twitter_x_id"]
 
         headers = {
-            'authorization': f'Brearer {self.auth_token}',
+            'Authorization': f'Bearer {self.auth_token.strip()}',
             'user-agent': self.user_agent,
             'content-type': 'application/json',
             'accept': '*/*',
@@ -405,12 +415,21 @@ class DawnExtensionAPI(APIClient):
         }
 
         for task in tasks:
-            await self.send_request(
+            response = await self.send_request(
                 method="/v1/profile/update",
                 json_data={task: task},
                 headers=headers,
                 params={"appid": app_id},
+                verify=False,
+                return_full_response=True,
             )
+
+            if response.status_code != 200:
+                raise ServerError(
+                    f"Task {task} failed with status {response.status_code}: {response.text}"
+                )
+
+            print(f"Task {task} response: {response.text}")
 
             await asyncio.sleep(delay)
 
