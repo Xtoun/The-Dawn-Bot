@@ -395,7 +395,7 @@ class DawnExtensionAPI(APIClient):
             tasks = ["telegramid", "discordid", "twitter_x_id"]
 
         headers = {
-            'authorization': f'Brearer {self.auth_token}',
+            'authorization': f'Bearer {self.auth_token}',
             'user-agent': self.user_agent,
             'content-type': 'application/json',
             'accept': '*/*',
