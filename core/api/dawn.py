@@ -275,7 +275,7 @@ class DawnExtensionAPI(APIClient):
         headers = {
             'user-agent': self.user_agent,
             'content-type': 'application/json',
-            'authorization': f'Berear {self.auth_token}',
+            'authorization': f'Bearer {self.auth_token}',
             'accept': '*/*',
             'origin': 'chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp',
             'accept-language': 'uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -301,7 +301,7 @@ class DawnExtensionAPI(APIClient):
     @require_auth_token
     async def user_info(self, app_id: str) -> dict:
         headers = {
-            'authorization': f'Berear {self.auth_token}',
+            'authorization': f'Bearer {self.auth_token}',
             'user-agent': self.user_agent,
             'content-type': 'application/json',
             'accept': '*/*',
@@ -410,6 +410,7 @@ class DawnExtensionAPI(APIClient):
                 json_data={task: task},
                 headers=headers,
                 params={"appid": app_id},
+                verify=False,
             )
 
             await asyncio.sleep(delay)
