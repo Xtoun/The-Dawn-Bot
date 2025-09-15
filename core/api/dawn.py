@@ -12,8 +12,6 @@ from core.exceptions.base import APIError, SessionRateLimited, ServerError, Prox
 from loader import config
 
 
-
-
 class APIClient:
     EXTENSION_API_URL = "https://ext-api.dawninternet.com/api"
     DASHBOARD_API_URL = "https://ext-api.dawninternet.com/chromeapi/dawn"
@@ -35,7 +33,6 @@ class APIClient:
 
         return session
 
-
     async def clear_request(self, url: str) -> Response:
         session = self._create_session()
         return await session.get(url, allow_redirects=True, verify=False)
@@ -43,19 +40,11 @@ class APIClient:
     @staticmethod
     async def _verify_response(response_data: dict | list):
         if isinstance(response_data, dict):
-            if "status" in str(response_data):
-                if isinstance(response_data, dict):
-                    if response_data.get("status") is False:
-                        raise APIError(
-                            f"API returned an error: {response_data}", response_data
-                        )
-
-            elif "success" in str(response_data):
-                if isinstance(response_data, dict):
-                    if response_data.get("success") is False:
-                        raise APIError(
-                            f"API returned an error: {response_data}", response_data
-                        )
+            # Common API styles: {"status": false, ...} or {"success": false, ...}
+            if "status" in response_data and response_data.get("status") is False:
+                raise APIError(f"API returned an error: {response_data}", response_data)
+            if "success" in response_data and response_data.get("success") is False:
+                raise APIError(f"API returned an error: {response_data}", response_data)
 
     async def close_session(self) -> None:
         try:
@@ -78,7 +67,10 @@ class APIClient:
         max_retries: int = 2,
         retry_delay: float = 3.0,
     ):
-        url = url if url else f"{self.EXTENSION_API_URL}{method}" if api_type == "EXTENSION" else f"{self.DASHBOARD_API_URL}{method}"
+        url = url if url else (
+            f"{self.EXTENSION_API_URL}{method}" if api_type == "EXTENSION"
+            else f"{self.DASHBOARD_API_URL}{method}"
+        )
 
         for attempt in range(max_retries):
             try:
@@ -115,6 +107,7 @@ class APIClient:
 
                     content_type = response.headers.get("content-type", "")
                     if "application/json" not in content_type:
+                        # Sometimes backend returns HTML error page
                         print(
                             f"Unexpected content type '{content_type}': {response.text[:200]}"
                         )
@@ -158,6 +151,12 @@ class DawnExtensionAPI(APIClient):
         super().__init__(proxy)
         self.auth_token = auth_token
 
+    def _auth_headers(self) -> dict:
+        token = (self.auth_token or "").strip()
+        if token and not token.lower().startswith("bearer "):
+            token = f"Bearer {token}"
+        return {"Authorization": token} if token else {}
+
     async def get_puzzle_id(self, app_id: str) -> str:
         headers = {
             'user-agent': self.user_agent,
@@ -194,7 +193,6 @@ class DawnExtensionAPI(APIClient):
         )
 
         return response.get("imgBase64")
-
 
     async def get_app_id(self) -> str:
         headers = {
@@ -235,6 +233,7 @@ class DawnExtensionAPI(APIClient):
                 request_type="GET",
                 url="https://ipwho.is/",
                 verify=False,
+                return_full_response=True,
             )
             if response.status_code == 200:
                 data = response.json()
@@ -283,13 +282,9 @@ class DawnExtensionAPI(APIClient):
     @require_auth_token
     async def keepalive(self, email: str, app_id: str) -> dict | str:
         headers = {
+            **self._auth_headers(),
             'user-agent': self.user_agent,
             'content-type': 'application/json',
-          codex/fix-api-authorization-errors-yisq9o
-            'Authorization': f'Bearer {self.auth_token.strip()}',
-
-            'authorization': f'Bearer {self.auth_token}',
-        main
             'accept': '*/*',
             'origin': 'chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp',
             'accept-language': 'uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -315,11 +310,7 @@ class DawnExtensionAPI(APIClient):
     @require_auth_token
     async def user_info(self, app_id: str) -> dict:
         headers = {
-        codex/fix-api-authorization-errors-yisq9o
-            'Authorization': f'Bearer {self.auth_token.strip()}',
-       
-            'authorization': f'Bearer {self.auth_token}',
-        main
+            **self._auth_headers(),
             'user-agent': self.user_agent,
             'content-type': 'application/json',
             'accept': '*/*',
@@ -407,17 +398,9 @@ class DawnExtensionAPI(APIClient):
             headers=headers,
         )
 
-    @require_auth_token
-    async def complete_tasks(self, app_id: str, tasks: list[str] = None, delay: int = 1) -> None:
-        if not tasks:
-            tasks = ["telegramid", "discordid", "twitter_x_id"]
-
+    async def _profile_update(self, app_id: str, payload: dict) -> dict:
         headers = {
-        codex/fix-api-authorization-errors-yisq9o
-            'Authorization': f'Bearer {self.auth_token.strip()}',
-       
-            'authorization': f'Bearer {self.auth_token}',
-        main
+            **self._auth_headers(),
             'user-agent': self.user_agent,
             'content-type': 'application/json',
             'accept': '*/*',
@@ -426,34 +409,39 @@ class DawnExtensionAPI(APIClient):
             'accept-encoding': 'gzip, deflate, br'
         }
 
-        for task in tasks:
-            response = await self.send_request(
-                method="/v1/profile/update",
-                json_data={task: task},
-                headers=headers,
-                params={"appid": app_id},
-                verify=False,
-        codex/fix-api-authorization-errors-yisq9o
-                return_full_response=True,
-            )
+        response = await self.send_request(
+            method="/v1/profile/update",
+            json_data=payload,
+            headers=headers,
+            params={"appid": app_id},
+        )
 
-            if response.status_code != 200:
-                raise ServerError(
-                    f"Task {task} failed with status {response.status_code}: {response.text}"
-                )
+        print(f"Task {list(payload.keys())[0]} response: {response}")
+        return response
 
-            print(f"Task {task} response: {response.text}")
-       
-            )
+    @require_auth_token
+    async def get_twitter_points(self, app_id: str) -> dict:
+        return await self._profile_update(app_id, {"twitter_x_id": "twitter_x_id"})
 
-            print(f"Task {task} response: {response}")
-        main
+    @require_auth_token
+    async def get_discord_points(self, app_id: str) -> dict:
+        return await self._profile_update(app_id, {"discordid": "discordid"})
 
-            await asyncio.sleep(delay)
+    @require_auth_token
+    async def get_telegram_points(self, app_id: str) -> dict:
+        return await self._profile_update(app_id, {"telegramid": "telegramid"})
 
-    async def verify_session(self) -> tuple[bool, str]:
+    @require_auth_token
+    async def complete_tasks(self, app_id: str, delay: int = 1) -> None:
+        await self.get_twitter_points(app_id)
+        await asyncio.sleep(delay)
+        await self.get_discord_points(app_id)
+        await asyncio.sleep(delay)
+        await self.get_telegram_points(app_id)
+
+    async def verify_session(self, app_id: str) -> tuple[bool, str]:
         try:
-            await self.user_info()
+            await self.user_info(app_id)
             return True, "Session is valid"
 
         except ServerError:
