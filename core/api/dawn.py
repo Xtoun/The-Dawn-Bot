@@ -285,7 +285,11 @@ class DawnExtensionAPI(APIClient):
         headers = {
             'user-agent': self.user_agent,
             'content-type': 'application/json',
+          codex/fix-api-authorization-errors-yisq9o
             'Authorization': f'Bearer {self.auth_token.strip()}',
+
+            'authorization': f'Bearer {self.auth_token}',
+        main
             'accept': '*/*',
             'origin': 'chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp',
             'accept-language': 'uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -311,7 +315,11 @@ class DawnExtensionAPI(APIClient):
     @require_auth_token
     async def user_info(self, app_id: str) -> dict:
         headers = {
+        codex/fix-api-authorization-errors-yisq9o
             'Authorization': f'Bearer {self.auth_token.strip()}',
+       
+            'authorization': f'Bearer {self.auth_token}',
+        main
             'user-agent': self.user_agent,
             'content-type': 'application/json',
             'accept': '*/*',
@@ -405,7 +413,11 @@ class DawnExtensionAPI(APIClient):
             tasks = ["telegramid", "discordid", "twitter_x_id"]
 
         headers = {
+        codex/fix-api-authorization-errors-yisq9o
             'Authorization': f'Bearer {self.auth_token.strip()}',
+       
+            'authorization': f'Bearer {self.auth_token}',
+        main
             'user-agent': self.user_agent,
             'content-type': 'application/json',
             'accept': '*/*',
@@ -421,6 +433,7 @@ class DawnExtensionAPI(APIClient):
                 headers=headers,
                 params={"appid": app_id},
                 verify=False,
+        codex/fix-api-authorization-errors-yisq9o
                 return_full_response=True,
             )
 
@@ -430,6 +443,11 @@ class DawnExtensionAPI(APIClient):
                 )
 
             print(f"Task {task} response: {response.text}")
+       
+            )
+
+            print(f"Task {task} response: {response}")
+        main
 
             await asyncio.sleep(delay)
 
