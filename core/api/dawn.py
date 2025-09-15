@@ -113,12 +113,22 @@ class APIClient:
                     if response.status_code in (500, 502, 503, 504):
                         raise ServerError(f"Server error - {response.status_code}")
 
+                    content_type = response.headers.get("content-type", "")
+                    if "application/json" not in content_type:
+                        print(
+                            f"Unexpected content type '{content_type}': {response.text[:200]}"
+                        )
+                        raise ServerError("Unexpected response format, most likely server error")
+
                     try:
                         response_json = response.json()
                         await self._verify_response(response_json)
                         return response_json
                     except json.JSONDecodeError:
-                        raise ServerError(f"Failed to decode response, most likely server error")
+                        print(f"Failed to decode response: {response.text}")
+                        raise ServerError(
+                            "Failed to decode response, most likely server error"
+                        )
 
                 if return_full_response:
                     return response
@@ -147,6 +157,12 @@ class DawnExtensionAPI(APIClient):
     def __init__(self, auth_token: str = None, proxy: str = None):
         super().__init__(proxy)
         self.auth_token = auth_token
+
+    def _auth_headers(self) -> dict:
+        token = (self.auth_token or "").strip()
+        if not token.lower().startswith("bearer "):
+            token = f"Bearer {token}"
+        return {"Authorization": token}
 
     async def get_puzzle_id(self, app_id: str) -> str:
         headers = {
@@ -273,9 +289,9 @@ class DawnExtensionAPI(APIClient):
     @require_auth_token
     async def keepalive(self, email: str, app_id: str) -> dict | str:
         headers = {
+            **self._auth_headers(),
             'user-agent': self.user_agent,
             'content-type': 'application/json',
-            'authorization': f'Berear {self.auth_token}',
             'accept': '*/*',
             'origin': 'chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp',
             'accept-language': 'uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -301,7 +317,7 @@ class DawnExtensionAPI(APIClient):
     @require_auth_token
     async def user_info(self, app_id: str) -> dict:
         headers = {
-            'authorization': f'Berear {self.auth_token}',
+            **self._auth_headers(),
             'user-agent': self.user_agent,
             'content-type': 'application/json',
             'accept': '*/*',
@@ -389,13 +405,9 @@ class DawnExtensionAPI(APIClient):
             headers=headers,
         )
 
-    @require_auth_token
-    async def complete_tasks(self, app_id: str, tasks: list[str] = None, delay: int = 1) -> None:
-        if not tasks:
-            tasks = ["telegramid", "discordid", "twitter_x_id"]
-
+    async def _profile_update(self, app_id: str, payload: dict) -> dict:
         headers = {
-            'authorization': f'Brearer {self.auth_token}',
+            'authorization': self._auth_headers()["Authorization"],
             'user-agent': self.user_agent,
             'content-type': 'application/json',
             'accept': '*/*',
@@ -404,15 +416,35 @@ class DawnExtensionAPI(APIClient):
             'accept-encoding': 'gzip, deflate, br'
         }
 
-        for task in tasks:
-            await self.send_request(
-                method="/v1/profile/update",
-                json_data={task: task},
-                headers=headers,
-                params={"appid": app_id},
-            )
+        response = await self.send_request(
+            method="/v1/profile/update",
+            json_data=payload,
+            headers=headers,
+            params={"appid": app_id},
+        )
 
-            await asyncio.sleep(delay)
+        print(f"Task {list(payload.keys())[0]} response: {response}")
+        return response
+
+    @require_auth_token
+    async def get_twitter_points(self, app_id: str) -> dict:
+        return await self._profile_update(app_id, {"twitter_x_id": "twitter_x_id"})
+
+    @require_auth_token
+    async def get_discord_points(self, app_id: str) -> dict:
+        return await self._profile_update(app_id, {"discordid": "discordid"})
+
+    @require_auth_token
+    async def get_telegram_points(self, app_id: str) -> dict:
+        return await self._profile_update(app_id, {"telegramid": "telegramid"})
+
+    @require_auth_token
+    async def complete_tasks(self, app_id: str, delay: int = 1) -> None:
+        await self.get_twitter_points(app_id)
+        await asyncio.sleep(delay)
+        await self.get_discord_points(app_id)
+        await asyncio.sleep(delay)
+        await self.get_telegram_points(app_id)
 
     async def verify_session(self) -> tuple[bool, str]:
         try:
