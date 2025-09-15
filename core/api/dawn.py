@@ -118,7 +118,10 @@ class APIClient:
                         await self._verify_response(response_json)
                         return response_json
                     except json.JSONDecodeError:
-                        raise ServerError(f"Failed to decode response, most likely server error")
+                        print(f"Failed to decode response: {response.text}")
+                        raise ServerError(
+                            "Failed to decode response, most likely server error"
+                        )
 
                 if return_full_response:
                     return response
@@ -275,7 +278,7 @@ class DawnExtensionAPI(APIClient):
         headers = {
             'user-agent': self.user_agent,
             'content-type': 'application/json',
-            'authorization': f'Berear {self.auth_token}',
+            'authorization': f'Bearer {self.auth_token}',
             'accept': '*/*',
             'origin': 'chrome-extension://fpdkjdnhkakefebpekbdhillbhonfjjp',
             'accept-language': 'uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -301,7 +304,7 @@ class DawnExtensionAPI(APIClient):
     @require_auth_token
     async def user_info(self, app_id: str) -> dict:
         headers = {
-            'authorization': f'Berear {self.auth_token}',
+            'authorization': f'Bearer {self.auth_token}',
             'user-agent': self.user_agent,
             'content-type': 'application/json',
             'accept': '*/*',
@@ -395,7 +398,7 @@ class DawnExtensionAPI(APIClient):
             tasks = ["telegramid", "discordid", "twitter_x_id"]
 
         headers = {
-            'authorization': f'Brearer {self.auth_token}',
+            'authorization': f'Bearer {self.auth_token}',
             'user-agent': self.user_agent,
             'content-type': 'application/json',
             'accept': '*/*',
@@ -405,12 +408,14 @@ class DawnExtensionAPI(APIClient):
         }
 
         for task in tasks:
-            await self.send_request(
+            response = await self.send_request(
                 method="/v1/profile/update",
                 json_data={task: task},
                 headers=headers,
                 params={"appid": app_id},
             )
+
+            print(f"Task {task} response: {response}")
 
             await asyncio.sleep(delay)
 
