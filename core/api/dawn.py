@@ -118,7 +118,10 @@ class APIClient:
                         await self._verify_response(response_json)
                         return response_json
                     except json.JSONDecodeError:
-                        raise ServerError(f"Failed to decode response, most likely server error")
+                        print(f"Failed to decode response: {response.text}")
+                        raise ServerError(
+                            "Failed to decode response, most likely server error"
+                        )
 
                 if return_full_response:
                     return response
@@ -405,13 +408,15 @@ class DawnExtensionAPI(APIClient):
         }
 
         for task in tasks:
-            await self.send_request(
+            response = await self.send_request(
                 method="/v1/profile/update",
                 json_data={task: task},
                 headers=headers,
                 params={"appid": app_id},
                 verify=False,
             )
+
+            print(f"Task {task} response: {response}")
 
             await asyncio.sleep(delay)
 
